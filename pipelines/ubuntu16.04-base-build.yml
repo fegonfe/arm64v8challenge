@@ -1,0 +1,42 @@
+pool:
+  name: Hosted Ubuntu 1604
+steps:
+- bash: |
+   # Install QEMU on host agent
+   
+   sudo apt-get update
+   sudo apt-get install -y qemu qemu-user-static qemu-user binfmt-support
+   
+   # copy to homedir
+   
+   mkdir $homedir/qemu
+   cp /usr/bin/qemu-aarch64-static $homedir/qemu
+   
+  displayName: 'Install QEMU'
+  env:
+    homedir: $(Agent.HomeDirectory)
+
+- task: CopyFiles@2
+  displayName: 'Copy QEMU static to Build Context'
+  inputs:
+    SourceFolder: '$(Agent.HomeDirectory)/qemu'
+    Contents: |
+     qemu-aarch64-static
+     
+    TargetFolder: '$(Build.SourcesDirectory)/ubuntu16.04/base'
+
+- task: Docker@2
+  displayName: 'Run priviledged container'
+  inputs:
+    command: run
+    arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+
+- task: Docker@2
+  displayName: 'build and push'
+  inputs:
+    containerRegistry: 'acr-serviceconnection'
+    repository: arm64v8/base
+    Dockerfile: ubuntu16.04/base/Dockerfile
+    tags: |
+     1.0.$(Build.BuildId)-xenial
+     latest
