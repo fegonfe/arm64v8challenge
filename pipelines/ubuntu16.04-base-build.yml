@@ -26,9 +26,5 @@ steps:
     repository: arm64v8/base
     Dockerfile: ubuntu16.04/base/Dockerfile
     tags: |
-     1.$(Build.BuildId)-xenial
+     1.0.$(Build.BuildId)-xenial
      latest
-
-
-
-
