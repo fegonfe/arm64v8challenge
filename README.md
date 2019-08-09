@@ -57,9 +57,13 @@ First task installs QEMU on the Host Agent and copy the static file for ARM64 to
 az group create --name arm64v8challenge --location eastus
 az acr create --resource-group arm64v8challenge --name arm64v8cr --sku Basic
 ```
-**Step 5.** Create a service principal with AcrPush permission:
+**Step 5.** Create two service principals. One with AcrPush and AcrPull permissions to be used by the pipeline. The second only with AcrPull permission to be used by the device.
 ```sh
-az ad sp create-for-rbac --name azuredevops-push --scopes $(az acr show --name myContainerRegistryARM --query id --output tsv) --role acrpush
+$scope = $(az acr show --name arm64v8cr --query id --output tsv)
+az ad sp create-for-rbac --name azuredevops-pullpush --scopes $scope --role acrpush
+$objId = $(az ad sp show --id http://azuredevops-pullpush --query objectId)
+az role assignment create --assignee-object-id $objId --scope $scope --role acrpull
+az ad sp create-for-rbac --name iotdevice-pull --scopes $scope --role acrpull
 ```
 **Step 6.** Now on Azure DevOps, open Project Settings (last option on left-menu). Under Pipelines, click on Service Connections and create a new service connection. Select Docker Registry and configure using the following:
 * Registry type: Azure Container Registry
