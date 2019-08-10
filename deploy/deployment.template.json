@@ -63,7 +63,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "$IMAGE",
+              "image": "$CONTAINER_REGISTRY/$IMAGE",
               "createOptions": {}
             }
           }
@@ -74,7 +74,7 @@
       "properties.desired": {
         "schemaVersion": "1.0",
         "routes": {
-          "$MODULE_NAMEToIoTHub": "FROM /messages/modules/$MODULE_NAME/outputs/* INTO $upstream"
+          "${MODULE_NAME}ToIoTHub": "FROM /messages/modules/$MODULE_NAME/outputs/* INTO $upstream"
         },
         "storeAndForwardConfiguration": {
           "timeToLiveSecs": 7200
