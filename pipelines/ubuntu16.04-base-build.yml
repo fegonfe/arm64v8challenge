@@ -22,9 +22,35 @@ steps:
 - task: Docker@2
   displayName: 'build and push'
   inputs:
+    # uses service connection created in step 5
     containerRegistry: 'acr-serviceconnection'
     repository: arm64v8/base
     Dockerfile: ubuntu16.04/base/Dockerfile
     tags: |
      1.0.$(Build.BuildId)-xenial
      latest
+
+- task: AzureKeyVault@1
+  displayName: 'Azure Key Vault: Get Credentials'
+  inputs:
+    # uses service connection created in step 5
+    azureSubscription: 'arm-serviceconnection'
+    KeyVaultName: arm64v8KeyVault
+
+- task: AzureIoTEdge@2
+  displayName: 'Azure IoT Edge - Generate deployment manifest'
+  inputs:
+    action: 'Generate deployment manifest'
+    templateFilePath: deploy/deployment.template.json
+    defaultPlatform: arm64v8
+  env:
+    CONTAINER_REGISTRY_USERNAME: $(iot-device-user)
+    CONTAINER_REGISTRY_PASSWORD: $(iot-device-pwd)
+    CONTAINER_REGISTRY: arm64v8cr.azurecr.io
+    MODULE_NAME: arm64v8base
+    IMAGE: arm64v8/base:latest
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
+  inputs:
+    PathtoPublish: '$(System.DefaultWorkingDirectory)/config/deployment.json'
