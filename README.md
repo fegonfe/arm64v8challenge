@@ -14,6 +14,7 @@ It all begins with an OS image. You probably are not running ARM64 on your dev e
 With Linux, the story is different. You need a machine emulator such as [QEMU](http://wiki.qemu.org/) to do the job. The problem now is how to do this on a build agent. This [article](https://docs.microsoft.com/en-us/azure/devops/pipelines/languages/docker?view=azure-devops#build-arm-containers) explains the requirements: 
 1. Author your Dockerfile so that a binary of QEMU (for the target platform) exists in the base Docker image.
 2. Run a privileged container that register QEMU on the build agent.
+Actually, you only need ton run a privileged container if you have platform dependent instructions, like RUN or ENV, on your Dockerfile.
 
 **Step 1.** Create a resource group and a private container registry:
 ```powershell
@@ -57,6 +58,7 @@ steps:
   inputs:
     command: run
     arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+  enabled: false
 
 - task: Docker@2
   displayName: 'build and push'
@@ -71,7 +73,7 @@ steps:
 ```
 Here is what this pipeline does:
 1. First, a bash script that installs QEMU on the Host Agent and copy the static file for ARM64 to the same folder where the Dockerfile is. With this, when docker builds the image, it will find the right file to copy. 
-2. The second task runs the privileged container as explained above. 
+2. Note that the second task is not enabled. It is the task that runs the privileged container as explained above. Since the Dockerfile does not have any platform dependent instructions, you don't it to enabled it.
 3. The third task builds the image and push it to the container registry. 
 
 **Step 6.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-base-build.yml and click **Continue**. Review the yml file and click **Run**.
