@@ -16,27 +16,41 @@ With Linux, the story is different. You need a machine emulator such as [QEMU](h
 2. Run a privileged container that register QEMU on the build agent.
 Actually, you only need ton run a privileged container if you have platform dependent instructions, like RUN or ENV, on your Dockerfile.
 
-**Step 1.** Create a resource group and a private container registry:
-```powershell
-az group create --name arm64v8challenge --location eastus
-az acr create --resource-group arm64v8challenge --name arm64v8cr --sku Basic
+**Step 1.** Define the variables that you are going to use through out the lab:
+```bash
+userId=$(az ad signed-in-user show --query objectId)
+unique=${userId:1:8}
+resourceGroup=arm64v8challenge
+location=eastus
+containerRegistry=arm64v8cr$unique
+iotHub=iothub-arm64v8challenge$unique
+svcPrincipalDevice=iotdevice-pull$unique
+svcPrincipalPipeline=sp-arm64v8challenge$unique
+keyVault=arm64v8KeyVault$unique
 ```
-**Step 2.** Create the service connection that you are going to reference in the pipeline. In the Azure DevOps project, open **Project Settings** (last option on the left menu). Under **Pipelines**, click on **Service Connections** and create a new service connection. Select **Docker Registry** and configure using the following values:
+**Step 2.** Create a resource group and a private container registry:
+```bash
+az group create --name $resourceGroup --location $location
+az acr create --resource-group $resourceGroup --name $containerRegistry --sku Basic
+```
+**Step 3.** Create the service connection that you are going to reference in the pipeline. In the Azure DevOps project, open **Project Settings** (last option on the left menu). Under **Pipelines**, click on **Service Connections** and create a new service connection. Select **Docker Registry** and configure using the following values:
 * Registry type: Azure Container Registry
 * Connection name: acr-serviceconnection
 * Azure subscription: {your subscription}
-* Azure container registry: arm64v8cr
+* Azure container registry: {fill it with the value of the $containerRegistry variable}
 
-**Step 3.** Create a new repo on Azure Repo (or github).
+**Step 4.** Create a new repo on Azure Repo (or github).
 
-**Step 4.** Create a new folder and name it ubuntu16.04/base and set Dockerfile as the file name. Copy and Paste the following to the Dockerfile:
+**Step 5.** Create a new folder and name it ubuntu16.04/base and set Dockerfile as the file name. Copy and Paste the following to the Dockerfile:
 
     ARG UBUNTU_VERSION=xenial
     FROM arm64v8/ubuntu:${UBUNTU_VERSION} as base
     # this will satisfy the requirement to have the binary inside the image
     COPY qemu-aarch64-static /usr/bin 
 
-**Step 5.** Create a new folder and name it pipelines and set ubuntu16.04-base-build.yml as the file name. Copy and Paste the following to the yml file:
+When you build your container image, it will pull a base image from the Docker Hub and add the static file as required.
+ 
+**Step 6.** Create a new folder and name it pipelines and set ubuntu16.04-base-build.yml as the file name. Copy and Paste the following to the yml file:
 ```yml
 pool:
   name: Hosted Ubuntu 1604
@@ -63,7 +77,7 @@ steps:
 - task: Docker@2
   displayName: 'build and push'
   inputs:
-    # uses service connection created in step 2
+    # uses service connection created in step 3
     containerRegistry: 'acr-serviceconnection'
     repository: arm64v8/base
     Dockerfile: ubuntu16.04/base/Dockerfile
@@ -76,12 +90,12 @@ Here is what this pipeline does:
 2. Note that the second task is not enabled. It is the task that runs the privileged container as explained above. Since the Dockerfile does not have any platform dependent instructions, you don't it to enabled it.
 3. The third task builds the image and push it to the container registry. 
 
-**Step 6.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-base-build.yml and click **Continue**. Review the yml file and click **Run**.
+**Step 7.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-base-build.yml and click **Continue**. Review the yml file and click **Run**.
 
-**Step 7.** If the build succeeded, you can check your image:
-```powershell
-az acr repository list --name arm64v8cr
-az acr repository show-tags --name arm64v8cr --repository arm64v8/base
+**Step 8.** If the build succeeded, you can check your image:
+```bash
+az acr repository list --name $containerRegistry
+az acr repository show-tags --name $containerRegistry --repository arm64v8/base
 ```
 ## Create and configure the IoT Edge device
 You have built an ARM64 image and pushed it to a repository. In the next steps, you are going to create and configure the resources that will allow the IoT Edge to pull that image. For the most part, you are going to follow the same steps as in this [article](https://docs.microsoft.com/en-us/azure/iot-edge/quickstart-linux):
@@ -89,35 +103,38 @@ You have built an ARM64 image and pushed it to a repository. In the next steps, 
 ![Image](https://docs.microsoft.com/en-us/azure/iot-edge/media/quickstart-linux/install-edge-full.png)
 
 **Step 1.** Create a VM that will work as your IoT Edge device. This is specially helpful during development, because you don't need the device to build the app. 
-```powershell
+```bash
 az vm image accept-terms --urn microsoft_iot_edge:iot_edge_vm_ubuntu:ubuntu_1604_edgeruntimeonly:latest
-az vm create --resource-group arm64v8challenge --name EdgeVM --image microsoft_iot_edge:iot_edge_vm_ubuntu:ubuntu_1604_edgeruntimeonly:latest --admin-username edgeadmin --generate-ssh-keys
+az vm create --resource-group $resourceGroup --name EdgeVM --image microsoft_iot_edge:iot_edge_vm_ubuntu:ubuntu_1604_edgeruntimeonly:latest --admin-username edgeadmin --generate-ssh-keys
 ```
-**Step 2.** Create an IoT Hub:
-```powershell  
-az iot hub create --resource-group arm64v8challenge --name iothub-arm64v8challenge --sku F1
-```  
-**Step 3.** Register an IoT Edge device and get its connection string
-```powershell
-az iot hub device-identity create --hub-name iothub-arm64v8challenge --device-id edgeDeviceVM --edge-enabled
-$connString = $(az iot hub device-identity show-connection-string -g arm64v8challenge --device-id edgeDeviceVM --hub-name iothub-arm64v8challenge --query connectionString -o tsv)
+**Step 2.** Install the Azure IoT extension
+```bash
+az extension add --name azure-cli-iot-ext
 ```
-**Step 4.** Set the connection string on the IoT Edge device: 
-```powershell  
-az vm run-command invoke -g arm64v8challenge -n EdgeVM --command-id RunShellScript --script "/etc/iotedge/configedge.sh '$connString'"
+**Step 3.** Create an IoT Hub:
+```bash  
+az iot hub create --resource-group $resourceGroup --name $iotHub --sku F1
 ```  
-
-**Step 5.** Connect to the VM:
-```powershell    
-$ipAddress  = $(az vm show -d -g arm64v8challenge -n EdgeVM --query publicIps)
+**Step 4.** Register an IoT Edge device and get its connection string
+```bash
+az iot hub device-identity create -g $resourceGroup --hub-name $iotHub --device-id edgeDeviceVM --edge-enabled
+connString=$(az iot hub device-identity show-connection-string -g $resourceGroup --device-id edgeDeviceVM --hub-name $iotHub --query connectionString -o tsv)
+```
+**Step 5.** Set the connection string on the IoT Edge device: 
+```bash  
+az vm run-command invoke -g $resourceGroup -n EdgeVM --command-id RunShellScript --script "/etc/iotedge/configedge.sh '$connString'"
+```
+**Step 6.** Connect to the VM:
+```bash    
+ipAddress=$(az vm show -d -g $resourceGroup -n EdgeVM --query publicIps -o tsv)
 ssh edgeadmin@$ipAddress
 ```    
-**Step 6.** Check if your IoT Edge Device is configured:
+**Step 7.** Check if your IoT Edge Device is configured:
 ```bash
 sudo systemctl status iotedge
 sudo iotedge list
 ```
-**Step 7.** Configure it to run the docker image. Run `uname -p` to check the platform. If you pull your image now, is it going to run?
+**Step 8.** Configure it to run the docker image. Run `uname -p` to check the platform. If you pull your image now, is it going to run?
 You are back to the original problem. As this device is not an ARM64, you need to install QEMU on it.
 ```bash
 sudo apt-get update
@@ -127,39 +144,39 @@ sudo apt-get install -y qemu qemu-user-static qemu-user binfmt-support
 You have the image and the device running. In the next steps, you are going to complete the build pipeline to create a deployment manifest. A deployment manifest tells an IoT Edge device (or a group of devices) which modules to install and how to configure them.
 
 **Step 1.** Create a service principal with AcrPull permission to be used by the device.
-```powershell
-$scope = $(az acr show --name arm64v8cr --query id --output tsv)
-$iotpwd=$(az ad sp create-for-rbac --name iotdevice-pull --scopes $scope --role acrpull --query password --output tsv)
-$iotappId=$(az ad sp show --id http://iotdevice-pull --query appId)
+```bash
+scope=$(az acr show --name $containerRegistry --query id --output tsv)
+iotpwd=$(az ad sp create-for-rbac --name $svcPrincipalDevice --scopes $scope --role acrpull --query password --output tsv)
+iotappId=$(az ad sp show --id http://$svcPrincipalDevice --query appId --output tsv)
 ```
 **Step 2.** Create a key vault to save the credential. You don't want to save the password in plain text in the yaml file.
-```powershell
-az keyvault create --name arm64v8KeyVault --resource-group arm64v8challenge --location eastus
-az keyvault secret set --vault-name arm64v8KeyVault --name iot-device-user --value $iotappId
-az keyvault secret set --vault-name arm64v8KeyVault --name iot-device-pwd --value $iotpwd
+```bash
+az keyvault create --name $keyVault --resource-group $resourceGroup --location $location
+az keyvault secret set --vault-name $keyVault --name iot-device-user --value $iotappId
+az keyvault secret set --vault-name $keyVault --name iot-device-pwd --value $iotpwd
 ```
 **Step 3.** Create a new service principal with permissions to get the secrets from the key vault.
-```powershell
-$devopspwd=$(az ad sp create-for-rbac --name sp-arm64v8challenge --skip-assignment --query password --output tsv)
-$devopsappId=$(az ad sp show --id http://sp-arm64v8challenge --query appId)
-az keyvault set-policy --name arm64v8KeyVault --spn http://sp-arm64v8challenge --secret-permissions get list
+```bash
+devopspwd=$(az ad sp create-for-rbac --name $svcPrincipalPipeline --skip-assignment --query password --output tsv)
+devopsappId=$(az ad sp show --id http://$svcPrincipalPipeline --query appId -o tsv)
+az keyvault set-policy --name $keyVault --spn http://$svcPrincipalPipeline --secret-permissions get list
 ```
 **Step 4.** Create a new service connection. Select **Azure Resource Manager** and click on the link **use the full version of the service connection dialog**. With this, you can use the service principal that you have created in the last step. Configure it using the following values:
 * Connection name: arm-serviceconnection
 * Scope level: Subscription
-* Service principal client ID: {fill it with the value of $devopsappId variable}
-* Service principal key: {fill it with the value of $devopspwd variable}
+* Service principal client ID: {fill it with the value of the $devopsappId variable}
+* Service principal key: {fill it with the value of the $devopspwd variable}
 
 **Step 5.** On your repo, create a new folder, name it deploy and set deployment.template.json as the file name. Copy and Paste the content from [this file](https://raw.githubusercontent.com/fegonfe/arm64v8challenge/master/deploy/deployment.template.json).
 
-**Step 6.** Edit the build pipeline (ubuntu16.04-base-build.yml) and add the following tasks:
+**Step 6.** Edit the build pipeline (ubuntu16.04-base-build.yml). Add the following tasks and replace the value of the **KeyVaultName** and **CONTAINER_REGISTRY** keys: 
 ```yml
 - task: AzureKeyVault@1
   displayName: 'Azure Key Vault: Get Credentials'
   inputs:
     # uses service connection created in step 4
     azureSubscription: 'arm-serviceconnection'
-    KeyVaultName: arm64v8KeyVault
+    KeyVaultName: {fill it with the value of the $keyVault variable}
 
 - task: AzureIoTEdge@2
   displayName: 'Azure IoT Edge - Generate deployment manifest'
@@ -170,7 +187,7 @@ az keyvault set-policy --name arm64v8KeyVault --spn http://sp-arm64v8challenge -
   env:
     CONTAINER_REGISTRY_USERNAME: $(iot-device-user)
     CONTAINER_REGISTRY_PASSWORD: $(iot-device-pwd)
-    CONTAINER_REGISTRY: arm64v8cr
+    CONTAINER_REGISTRY: {fill it with the value of the $containerRegistry variable}
     MODULE_NAME: arm64v8base
     IMAGE: arm64v8/base:latest
 
@@ -191,9 +208,9 @@ az keyvault set-policy --name arm64v8KeyVault --spn http://sp-arm64v8challenge -
 After the deployment manifest is created, you need to create a Release pipeline to publish it to the IoT Hub.
 
 **Step 1.** Allow the service principal to deploy a module.
-```powershell
-$scope = $(az iot hub show --name iothub-arm64v8challenge --query id --output tsv)
-az role assignment create --role Contributor --assignee http://sp-arm64v8challenge --scope $scope
+```bash
+scope=$(az iot hub show -g $resourceGroup --name $iotHub --query id --output tsv)
+az role assignment create --role Contributor --assignee http://$svcPrincipalPipeline --scope $scope
 ```
 **Step 2.** Create a release pipeline. In the Azure DevOps project, select **Pipelines** and open **Releases**. Click on **New** and then **New Release Pipeline**. In the **Select a template** panel, click **Empty job**. In the **Stage** panel, set **Stage name** as Test and close the panel.
 
@@ -211,14 +228,14 @@ Select the **Source (build pipeline)** and click on **Add**. Select the artifact
 * Action: Deploy to IoT Edge devices
 * Deployment file: Click on the ellipsis and in the **Select a file or folder**, select deployment.json
 * Azure subscription: arm-serviceconnection
-* IoT Hub name: iothub-arm64v8challenge
+* IoT Hub name: {fill it with the value of the the $iotHub variable}
 * Choose single/multiple device: Single Device
 * IoT Edge device ID: edgeDeviceVM
 
-Click on **Save**. Select Folder **\pipelines**, save and click on **Create release**. In the **Create a new release** panel, check that the artifact version you want to use is selected and choose **Create**. Choose the release link in the information bar message. For example: "Release **Release-1** has been created". In the pipeline view, choose the status link in the stages of the pipeline to see the logs and agent output.
+Click on **Save**. Click **OK** to save and click on **Create release**. In the **Create a new release** panel, check that the artifact version you want to use is selected and choose **Create**. Choose the release link in the information bar message. For example: "Release **Release-1** has been created". In the pipeline view, choose the status link in the stages of the pipeline to see the logs and agent output.
 
 **Step 6.** Connect to the VM:
-```powershell
+```bash
 ssh edgeadmin@$ipAddress
 ```
 

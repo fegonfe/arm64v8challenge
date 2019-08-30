@@ -18,6 +18,7 @@ steps:
   inputs:
     command: run
     arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+  enabled: false
 
 - task: Docker@2
   displayName: 'build and push'
