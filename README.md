@@ -8,7 +8,7 @@ Build arm64v8 docker containers and release to IoT Edge using Azure DevOps
 * An Azure DevOps org. If you don’t have one, you can create it following the instructions [here](https://docs.microsoft.com/en-us/azure/devops/organizations/accounts/create-organization?view=azure-devops).
 * A DevOps project. Create one following the instructions [here](https://docs.microsoft.com/en-us/azure/devops/organizations/projects/create-project?view=azure-devops).
 
-## First things first
+## Lab 1: First things first
 It all begins with an OS image. You probably are not running ARM64 on your dev environment, but you need to build a container to run on this platform. There are some arm64v8 container images available on http://hub.docker.com, but how can you build one? If you have Windows 10 or macOS, it is very straightforward because docker already does the job of running a container of a different platform.
 
 With Linux, the story is different. You need a machine emulator such as [QEMU](http://wiki.qemu.org/) to do the job. The problem now is how to do this on a build agent. This [article](https://docs.microsoft.com/en-us/azure/devops/pipelines/languages/docker?view=azure-devops#build-arm-containers) explains the requirements: 
@@ -16,7 +16,7 @@ With Linux, the story is different. You need a machine emulator such as [QEMU](h
 2. Run a privileged container that register QEMU on the build agent.
 Actually, you only need ton run a privileged container if you have platform dependent instructions, like RUN or ENV, on your Dockerfile.
 
-**Step 1.** Define the variables that you are going to use through out the lab:
+**Step 1.** Define the variables that you are going to use through out the labs:
 ```bash
 userId=$(az ad signed-in-user show --query objectId)
 unique=${userId:1:8}
@@ -37,7 +37,7 @@ az acr create --resource-group $resourceGroup --name $containerRegistry --sku Ba
 * Registry type: Azure Container Registry
 * Connection name: acr-serviceconnection
 * Azure subscription: {your subscription}
-* Azure container registry: {fill it with the value of the $containerRegistry variable}
+* Azure container registry: {select the registry created in step 2}
 
 **Step 4.** Create a new repo on Azure Repo (or github).
 
@@ -49,8 +49,8 @@ az acr create --resource-group $resourceGroup --name $containerRegistry --sku Ba
     COPY qemu-aarch64-static /usr/bin 
 
 When you build your container image, it will pull a base image from the Docker Hub and add the static file as required.
- 
-**Step 6.** Create a new folder and name it pipelines and set ubuntu16.04-base-build.yml as the file name. Copy and Paste the following to the yml file:
+
+**Step 6.** Create a new folder and name it pipelines and set ubuntu16.04-base.yml as the file name. Copy and Paste the following to the yml file:
 ```yml
 pool:
   name: Hosted Ubuntu 1604
@@ -87,17 +87,17 @@ steps:
 ```
 Here is what this pipeline does:
 1. First, a bash script that installs QEMU on the Host Agent and copy the static file for ARM64 to the same folder where the Dockerfile is. With this, when docker builds the image, it will find the right file to copy. 
-2. Note that the second task is not enabled. It is the task that runs the privileged container as explained above. Since the Dockerfile does not have any platform dependent instructions, you don't it to enabled it.
+2. Note that the second task is not enabled. It is the task that runs the privileged container as explained above. Since the Dockerfile does not have any platform dependent instructions, you don't need to enabled it.
 3. The third task builds the image and push it to the container registry. 
 
-**Step 7.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-base-build.yml and click **Continue**. Review the yml file and click **Run**.
+**Step 7.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-base.yml and click **Continue**. Review the yml file and click **Run**.
 
 **Step 8.** If the build succeeded, you can check your image:
 ```bash
 az acr repository list --name $containerRegistry
 az acr repository show-tags --name $containerRegistry --repository arm64v8/base
 ```
-## Create and configure the IoT Edge device
+### Create and configure the IoT Edge device
 You have built an ARM64 image and pushed it to a repository. In the next steps, you are going to create and configure the resources that will allow the IoT Edge to pull that image. For the most part, you are going to follow the same steps as in this [article](https://docs.microsoft.com/en-us/azure/iot-edge/quickstart-linux):
 
 ![Image](https://docs.microsoft.com/en-us/azure/iot-edge/media/quickstart-linux/install-edge-full.png)
@@ -118,7 +118,7 @@ az iot hub create --resource-group $resourceGroup --name $iotHub --sku F1
 **Step 4.** Register an IoT Edge device and get its connection string
 ```bash
 az iot hub device-identity create -g $resourceGroup --hub-name $iotHub --device-id edgeDeviceVM --edge-enabled
-connString=$(az iot hub device-identity show-connection-string -g $resourceGroup --device-id edgeDeviceVM --hub-name $iotHub --query connectionString -o tsv)
+connString=$(az iot hub device-identity show-connection-string -g $resourceGroup --device-id edgeDeviceVM --hub-name $iotHub --query connectionString --output tsv)
 ```
 **Step 5.** Set the connection string on the IoT Edge device: 
 ```bash  
@@ -126,7 +126,7 @@ az vm run-command invoke -g $resourceGroup -n EdgeVM --command-id RunShellScript
 ```
 **Step 6.** Connect to the VM:
 ```bash    
-ipAddress=$(az vm show -d -g $resourceGroup -n EdgeVM --query publicIps -o tsv)
+ipAddress=$(az vm show -d -g $resourceGroup -n EdgeVM --query publicIps --output tsv)
 ssh edgeadmin@$ipAddress
 ```    
 **Step 7.** Check if your IoT Edge Device is configured:
@@ -140,7 +140,7 @@ You are back to the original problem. As this device is not an ARM64, you need t
 sudo apt-get update
 sudo apt-get install -y qemu qemu-user-static qemu-user binfmt-support
 ```
-## Update the Build pipeline 
+### Update the Build pipeline 
 You have the image and the device running. In the next steps, you are going to complete the build pipeline to create a deployment manifest. A deployment manifest tells an IoT Edge device (or a group of devices) which modules to install and how to configure them.
 
 **Step 1.** Create a service principal with AcrPull permission to be used by the device.
@@ -158,7 +158,7 @@ az keyvault secret set --vault-name $keyVault --name iot-device-pwd --value $iot
 **Step 3.** Create a new service principal with permissions to get the secrets from the key vault.
 ```bash
 devopspwd=$(az ad sp create-for-rbac --name $svcPrincipalPipeline --skip-assignment --query password --output tsv)
-devopsappId=$(az ad sp show --id http://$svcPrincipalPipeline --query appId -o tsv)
+devopsappId=$(az ad sp show --id http://$svcPrincipalPipeline --query appId --output tsv)
 az keyvault set-policy --name $keyVault --spn http://$svcPrincipalPipeline --secret-permissions get list
 ```
 **Step 4.** Create a new service connection. Select **Azure Resource Manager** and click on the link **use the full version of the service connection dialog**. With this, you can use the service principal that you have created in the last step. Configure it using the following values:
@@ -169,7 +169,7 @@ az keyvault set-policy --name $keyVault --spn http://$svcPrincipalPipeline --sec
 
 **Step 5.** On your repo, create a new folder, name it deploy and set deployment.template.json as the file name. Copy and Paste the content from [this file](https://raw.githubusercontent.com/fegonfe/arm64v8challenge/master/deploy/deployment.template.json).
 
-**Step 6.** Edit the build pipeline (ubuntu16.04-base-build.yml). Add the following tasks and replace the value of the **KeyVaultName** and **CONTAINER_REGISTRY** keys: 
+**Step 6.** Edit the build pipeline (ubuntu16.04-base.yml). Add the following tasks and replace the value of the **KeyVaultName** and **CONTAINER_REGISTRY** keys: 
 ```yml
 - task: AzureKeyVault@1
   displayName: 'Azure Key Vault: Get Credentials'
@@ -204,7 +204,7 @@ az keyvault set-policy --name $keyVault --spn http://$svcPrincipalPipeline --sec
 
 **Step 8.** If the build succeeded, click on **Artifacts** and select **drop**. In the **Artifacts explorer**, you can check that the deployment.json file was created.
 
-## Deploy to the IoT Edge Device
+### Deploy to the IoT Edge Device
 After the deployment manifest is created, you need to create a Release pipeline to publish it to the IoT Hub.
 
 **Step 1.** Allow the service principal to deploy a module.
@@ -246,7 +246,8 @@ sudo docker images
 
 **Step 8.** Start the container.
 ```bash
-sudo docker run -it arm64v8cr.azurecr.io/arm64v8/base /bin/bash
+image=$(sudo docker images | grep azurecr.io/arm64v8/base | awk '{print $3}')
+sudo docker run -it $image /bin/bash
 ```
 
 **Step 9.** Check the platform.
@@ -254,3 +255,81 @@ sudo docker run -it arm64v8cr.azurecr.io/arm64v8/base /bin/bash
 uname -p
 ```
 Congrats! You have completed the CI/CD Pipelines and you have a place to test your app on the target platform.
+
+## Lab 2: Python
+Python is one of the programming languages that is supported on ARM64, but with some limitation regarding 
+packages. With the base image already created, adding Python to it becomes very simple.
+
+**Step 1.** Create a new folder and name it ubuntu16.04/python3.5 and set Dockerfile as the file name. Copy and Paste the following to the Dockerfile:
+
+    ARG DOCKER_REGISTRY
+    FROM ${DOCKER_REGISTRY}/arm64v8/base
+
+    RUN apt-get update \
+        && apt-get install -y --no-install-recommends wget ca-certificates python3 \
+        && wget -nv https://bootstrap.pypa.io/get-pip.py \
+        ## installs pip using recommended method
+        && python3 get-pip.py --disable-pip-version-check --no-cache-dir \
+        && apt-get purge -y wget \
+        && apt-get autoremove -y \
+        && apt-get clean -y \
+        && rm -rf /var/lib/apt/lists/* \
+        && rm -f get-pip.py
+
+**Step 2.** Create a new file under the pipelines folder and set ubuntu16.04-python3.5.yml as the file name. Copy and Paste the following to the yml file:
+```yml
+pool:
+  name: Hosted Ubuntu 1604
+steps:
+- task: Docker@2
+  displayName: 'Run priviledged container'
+  inputs:
+    command: run
+    arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+
+- task: Docker@2
+  displayName: 'build'
+  inputs:
+    command: build
+    # uses service connection created in Lab 1
+    containerRegistry: 'acr-serviceconnection'
+    repository: arm64v8/python3.5
+    Dockerfile: ubuntu16.04/python3.5/Dockerfile
+    arguments: --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)
+    tags: |
+     1.0.$(Build.BuildId)-xenial
+     latest
+
+- task: Docker@2
+  displayName: 'push'
+  inputs:
+    command: push
+    # uses service connection created in Lab 1
+    containerRegistry: 'acr-serviceconnection'
+    repository: arm64v8/python3.5
+    tags: |
+     1.0.$(Build.BuildId)-xenial
+     latest
+```
+Here is what this pipeline does:
+1. First task runs the privileged container as explained in Lab 1. It is need now because there is a RUN command in the Dockerfile.
+2. The second task builds the image using an argument to pass the container registry from where the base image will be pulled.
+3. The third task pushes the image.
+
+**Step 3.** The pipeline needs permission to pull the base image from the container registry:
+```bash
+scope=$(az acr show --name $containerRegistry --query id --output tsv)
+spdevops=$(az role assignment list --scope $scope --role AcrPush --query "[?principalName!=''].principalName" --output tsv)
+az role assignment create --role AcrPull --assignee $spdevops --scope $scope
+```
+
+**Step 4.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-python3.5.yml and click **Continue**. 
+After reviewing the yml file, click on **Variables** and then **New variable**. Set the name to **DOCKER_REGISTRY** and value with full name of the container registry, i.e. the value of $containerRegistry variable with ".azurecr.io" suffix. Click  **OK**, **Save** and then **Run**.
+
+**Step 5.** If the build succeeded, you can check your image:
+```bash
+az acr repository show-tags --name $containerRegistry --repository arm64v8/python3.5
+```
+
+### Big wheel keep on turning
+Stay tuned.
