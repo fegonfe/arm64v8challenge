@@ -346,7 +346,7 @@ For ARM64, you will have to use a Universal feed. Since there are standard tasks
     FROM ${DOCKER_REGISTRY}/arm64v8/python3.5
     
     RUN apt-get update \
-      && apt-get install -y --no-install-recommends build-essential python-dev libatlas-base-dev \
+      && apt-get install -y --no-install-recommends build-essential python3-dev libatlas-base-dev \
       && pip3 wheel --no-deps --wheel-dir=./dist numpy==1.16.4
 
 **Step 3.** Create a new file under the pipelines folder and set ubuntu16.04-python3.5-numpy.yml as the file name. Copy and Paste the following to the yml file:
