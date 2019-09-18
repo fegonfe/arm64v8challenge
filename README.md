@@ -346,7 +346,7 @@ For ARM64, you will have to use a Universal feed. Since there are standard tasks
     FROM ${DOCKER_REGISTRY}/arm64v8/python3.5
     
     RUN apt-get update \
-      && apt-get install -y --no-install-recommends build-essential libatlas-base-dev \
+      && apt-get install -y --no-install-recommends build-essential python-dev libatlas-base-dev \
       && pip3 wheel --no-deps --wheel-dir=./dist numpy==1.16.4
 
 **Step 3.** Create a new file under the pipelines folder and set ubuntu16.04-python3.5-numpy.yml as the file name. Copy and Paste the following to the yml file:
@@ -392,7 +392,6 @@ jobs:
       packagePublishDescription: 'numpy built with arm64v8/python:3.5'
 ```
 Here is what this pipeline does:
-1. First task runs the privileged container as explained in Lab 1. It is need now because there is a RUN command in the Dockerfile.
-2. The second task builds the image using an argument to pass the container registry from where the base image will be pulled.
-3. The third task creates a container just to copy the wheel file. Note that you don't to save this image to a repository.
-4. Last task publishes the package to the feed.
+1. First two tasks are the same as the python image.
+2. The third task creates a container just to copy the wheel file. Note that you don't to save this image to a repository.
+3. Last task publishes the package to the feed.
