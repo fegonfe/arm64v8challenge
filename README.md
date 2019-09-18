@@ -368,7 +368,7 @@ jobs:
       containerRegistry: 'acr-serviceconnection'
       command: build
       Dockerfile: ubuntu16.04/python3.5/numpy/Dockerfile
-      arguments: '--build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)'
+      arguments: '-t arm64v8/python3.5-numpy --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)'
       tags: arm64v8/python3.5-numpy
       addPipelineData: false
 
