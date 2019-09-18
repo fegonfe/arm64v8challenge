@@ -332,7 +332,7 @@ az acr repository show-tags --name $containerRegistry --repository arm64v8/pytho
 ```
 
 ### Big wheel keep on turning
-The challenge for python with ARM64 is that some packages are not available in wheel format. When you run `pip install package-name`, it actually downloads the source and compile it on your device. The [Numpy](https://www.numpy.org/) library, a well-known library used for scientific computing, is one example. It would not be a problem to allow the library to be compiled during the application build, but some libs take a lot of time to build. For example, numpy takes 20 minutes to build on a hosted agent ([Standard_DS2_v2](https://docs.microsoft.com/en-us/azure/virtual-machines/windows/sizes-general#dsv2-series)). This is where Artifacts feeds become handy. You can publish your packages to a feed and reuse them on as many applications as you need. But, there is a caveat for ARM64: you cannot use the python feed. If you try, you will receive this error:
+The challenge for python with ARM64 is that some packages are not available in wheel format. When you run `pip install package-name`, it actually downloads the source and compile it on your device. The [Numpy](https://www.numpy.org/) library, a well-known library used for scientific computing, is one example. It would not be a problem to allow the library to be compiled during the application build, but some libs take a lot of time to build. For example, numpy takes between 20 to 25 minutes to build on a hosted agent ([Standard_DS2_v2](https://docs.microsoft.com/en-us/azure/virtual-machines/windows/sizes-general#dsv2-series)). This is where Artifacts feeds become handy. You can publish your packages to a feed and reuse them on as many applications as you need. But, there is a caveat for ARM64: you cannot use the python feed. If you try, you will receive this error:
 
     The input file name 'package-name-version-none-none-linux_aarch64.whl' contains an invalid platform part: 'linux_aarch64'. See the platform section of PEP 425 (and PEP 513 for Linux distributions) for more information.
 
@@ -395,3 +395,8 @@ Here is what this pipeline does:
 1. First two tasks are the same as the python image.
 2. The third task creates a container just to copy the wheel file. Note that you don't to save this image to a repository.
 3. Last task publishes the package to the feed.
+
+**Step 4.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-python3.5.yml and click **Continue**. 
+After reviewing the yml file, click on **Variables** and then **New variable**. Set the name to **DOCKER_REGISTRY** and value with full name of the container registry, i.e. the value of $containerRegistry variable with ".azurecr.io" suffix. Click **OK**, **Save** and then **Run**.
+
+**Step 5.** If the build succeeded, go to **Artifacts** and you should see that the numpy package is available in the arm64 feed.
