@@ -1,0 +1,32 @@
+pool:
+  name: Hosted Ubuntu 1604
+steps:
+- task: Docker@2
+  displayName: 'Run priviledged container'
+  inputs:
+    command: run
+    arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+
+- task: Docker@2
+  displayName: 'build'
+  inputs:
+    command: build
+    # uses service connection created in Lab 1
+    containerRegistry: 'acr-serviceconnection'
+    repository: arm64v8/python3.5
+    Dockerfile: ubuntu16.04/python3.5/Dockerfile
+    arguments: --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)
+    tags: |
+     1.0.$(Build.BuildId)-xenial
+     latest
+
+- task: Docker@2
+  displayName: 'push'
+  inputs:
+    command: push
+    # uses service connection created in Lab 1
+    containerRegistry: 'acr-serviceconnection'
+    repository: arm64v8/python3.5
+    tags: |
+     1.0.$(Build.BuildId)-xenial
+     latest
