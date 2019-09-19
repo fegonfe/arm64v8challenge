@@ -9,22 +9,29 @@ jobs:
       command: run
       arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
 
+  - task: DownloadPackage@1
+    inputs:
+      feed: 'arm64'
+      definition: 'numpy'
+      version: '1.16.4'
+      downloadPath: '$(Build.SourcesDirectory)/ubuntu16.04/python3.5/h5py/prereqs'
+
   - task: Docker@2
     displayName: build
     inputs:
       containerRegistry: 'acr-serviceconnection'
       command: build
-      Dockerfile: ubuntu16.04/python3.5/numpy/Dockerfile
-      arguments: '-t arm64v8/python3.5-numpy --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)'
+      Dockerfile: ubuntu16.04/python3.5/h5py/Dockerfile
+      arguments: '-t arm64v8/python3.5-h5py --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)'
       addPipelineData: false
 
   - task: Bash@3
     inputs:
       targetType: 'inline'
       script: |
-        docker create -ti --name numpy arm64v8/python3.5-numpy bash
-        docker cp numpy:/dist $(Build.ArtifactStagingDirectory)/dist
-        docker rm -fv numpy
+        docker create -ti --name h5py arm64v8/python3.5-h5py bash
+        docker cp h5py:/dist $(Build.ArtifactStagingDirectory)/dist
+        docker rm -fv h5py
 
   - task: UniversalPackages@0
     inputs:
@@ -33,6 +40,6 @@ jobs:
       feedsToUsePublish: 'internal'
       vstsFeedPublish: 'arm64'
       versionOption: 'custom'
-      versionPublish: '1.16.4'
-      vstsFeedPackagePublish: 'numpy'
-      packagePublishDescription: 'numpy built with arm64v8/python3.5'
+      versionPublish: '2.9.0'
+      vstsFeedPackagePublish: 'h5py'
+      packagePublishDescription: 'h5py built with arm64v8/python3.5'

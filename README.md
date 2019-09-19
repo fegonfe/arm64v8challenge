@@ -389,7 +389,7 @@ jobs:
       versionOption: 'custom'
       versionPublish: '1.16.4'
       vstsFeedPackagePublish: 'numpy'
-      packagePublishDescription: 'numpy built with arm64v8/python:3.5'
+      packagePublishDescription: 'numpy built with arm64v8/python3.5'
 ```
 Here is what this pipeline does:
 1. First two tasks are the same as the python image.
