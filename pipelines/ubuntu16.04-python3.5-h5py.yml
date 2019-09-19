@@ -9,13 +9,15 @@ jobs:
       command: run
       arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
 
-  - task: DownloadPackage@1
+  - task: UniversalPackages@0
+    displayName: 'Download numpy'
     inputs:
-      feed: 'arm64'
-      definition: 'numpy'
-      version: '1.16.4'
-      downloadPath: '$(Build.SourcesDirectory)/ubuntu16.04/python3.5/h5py/prereqs'
-
+      command: download
+      vstsFeed: 'arm64'
+      vstsFeedPackage: 'numpy'
+      vstsPackageVersion: 1.16.4
+      downloadDirectory: '$(Build.SourcesDirectory)/ubuntu16.04/python3.5/h5py/prereqs'
+      
   - task: Docker@2
     displayName: build
     inputs:
