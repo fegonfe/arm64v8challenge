@@ -8,7 +8,7 @@ jobs:
     inputs:
       command: run
       arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
-
+     
   - task: Docker@2
     displayName: build
     inputs:
@@ -19,6 +19,7 @@ jobs:
       addPipelineData: false
 
   - task: Bash@3
+    displayName: 'Copy wheel'
     inputs:
       targetType: 'inline'
       script: |
@@ -27,6 +28,7 @@ jobs:
         docker rm -fv h5py
 
   - task: UniversalPackages@0
+    displayName: 'Publish package'
     inputs:
       command: 'publish'
       publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
