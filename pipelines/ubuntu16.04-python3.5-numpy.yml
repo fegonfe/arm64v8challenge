@@ -31,7 +31,7 @@ jobs:
       command: 'publish'
       publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
       feedsToUsePublish: 'internal'
-      vstsFeedPublish: 'arm64'
+      vstsFeedPublish: 'arm64v8'
       versionOption: 'custom'
       versionPublish: '1.16.4'
       vstsFeedPackagePublish: 'numpy'
