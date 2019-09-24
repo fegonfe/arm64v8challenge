@@ -10,7 +10,7 @@ jobs:
       arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
 
   - task: Docker@2
-    displayName: build
+    displayName: 'build numpy for arm64v8'
     inputs:
       containerRegistry: 'acr-serviceconnection'
       command: build
@@ -19,6 +19,7 @@ jobs:
       addPipelineData: false
 
   - task: Bash@3
+    displayName: 'copy wheel'
     inputs:
       targetType: 'inline'
       script: |
@@ -27,6 +28,7 @@ jobs:
         docker rm -fv numpy
 
   - task: UniversalPackages@0
+    displayName: 'upload wheel'
     inputs:
       command: 'publish'
       publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
