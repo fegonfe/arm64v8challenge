@@ -1,7 +1,7 @@
 jobs:
 - job: Build
   pool:
-    name: 'Self-hosted Ubuntu 16.04'
+    vmImage: 'ubuntu-16.04'
   steps:
   - task: Docker@2
     displayName: 'Run priviledged container'
@@ -17,7 +17,7 @@ jobs:
       vstsPackageVersion: 1.16.4
       downloadDirectory: '$(Build.SourcesDirectory)/ubuntu16.04/python3.5/h5py/prereqs'   
   - task: Docker@2
-    displayName: build
+    displayName: build h5py for arm64v8'
     inputs:
       containerRegistry: 'acr-serviceconnection'
       command: build
@@ -26,7 +26,7 @@ jobs:
       addPipelineData: false
 
   - task: Bash@3
-    displayName: 'Copy wheel'
+    displayName: 'copy wheel'
     inputs:
       targetType: 'inline'
       script: |
@@ -35,12 +35,12 @@ jobs:
         docker rm -fv h5py
 
   - task: UniversalPackages@0
-    displayName: 'Publish package'
+    displayName: 'upload wheel'
     inputs:
       command: 'publish'
       publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
       feedsToUsePublish: 'internal'
-      vstsFeedPublish: 'arm64'
+      vstsFeedPublish: 'arm64v8'
       versionOption: 'custom'
       versionPublish: '2.10.0'
       vstsFeedPackagePublish: 'h5py'
