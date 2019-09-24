@@ -17,7 +17,7 @@ jobs:
       vstsPackageVersion: 1.16.4
       downloadDirectory: '$(Build.SourcesDirectory)/ubuntu16.04/python3.5/h5py/prereqs'   
   - task: Docker@2
-    displayName: build h5py for arm64v8'
+    displayName: build h5py for arm64v8
     inputs:
       containerRegistry: 'acr-serviceconnection'
       command: build
