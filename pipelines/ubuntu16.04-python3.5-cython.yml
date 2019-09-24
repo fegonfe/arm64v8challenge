@@ -1,0 +1,40 @@
+jobs:
+- job: Build
+  pool:
+    vmImage: 'ubuntu-16.04'
+  steps:
+  - task: Docker@2
+    displayName: 'Run priviledged container'
+    inputs:
+      command: run
+      arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+
+  - task: Docker@2
+    displayName: 'build cython for arm64v8'
+    inputs:
+      containerRegistry: 'acr-serviceconnection'
+      command: build
+      Dockerfile: ubuntu16.04/python3.5/cython/Dockerfile
+      arguments: '-t arm64v8/python3.5-cython --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)'
+      addPipelineData: false
+
+  - task: Bash@3
+    displayName: 'copy wheel'
+    inputs:
+      targetType: 'inline'
+      script: |
+        docker create -ti --name cython arm64v8/python3.5-cython bash
+        docker cp cython:/dist $(Build.ArtifactStagingDirectory)/dist
+        docker rm -fv cython
+
+  - task: UniversalPackages@0
+    displayName: 'upload wheel'
+    inputs:
+      command: 'publish'
+      publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
+      feedsToUsePublish: 'internal'
+      vstsFeedPublish: 'arm64v8'
+      versionOption: 'custom'
+      versionPublish: '0.29.13'
+      vstsFeedPackagePublish: 'cython'
+      packagePublishDescription: 'cython built with arm64v8/python3.5'
