@@ -338,7 +338,7 @@ The challenge for python with ARM64 is that some packages are not available in w
 
 For ARM64, you will have to use a Universal feed. Since there are standard tasks to publish and download packages to/from a Universal feed, you will need to use them in your pipelines accordinly. Let's build a numpy package and publish to a feed.
 
-**Step 1.** On Azure DevOps, select **Artifacts** and click on **New feed**. Name it **arm64** and click **Create**.
+**Step 1.** On Azure DevOps, select **Artifacts** and click on **New feed**. Name it **arm64v8** and click **Create**.
 
 **Step 2.** Create a new folder and name it ubuntu16.04/python3.5/numpy and set Dockerfile as the file name. Copy and Paste the following to the Dockerfile:
 
@@ -385,7 +385,7 @@ jobs:
       command: 'publish'
       publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
       feedsToUsePublish: 'internal'
-      vstsFeedPublish: 'arm64'
+      vstsFeedPublish: 'arm64v8'
       versionOption: 'custom'
       versionPublish: '1.16.4'
       vstsFeedPackagePublish: 'numpy'
@@ -399,4 +399,14 @@ Here is what this pipeline does:
 **Step 4.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-python3.5.yml and click **Continue**. 
 After reviewing the yml file, click on **Variables** and then **New variable**. Set the name to **DOCKER_REGISTRY** and value with full name of the container registry, i.e. the value of $containerRegistry variable with ".azurecr.io" suffix. Click **OK**, **Save** and then **Run**.
 
-**Step 5.** If the build succeeded, go to **Artifacts** and you should see that the numpy package is available in the arm64 feed.
+**Step 5.** If the build succeeded, go to **Artifacts** and you should see that the numpy package is available in the arm64v8 feed.
+
+### When the wheels come down
+Here are more well-known libraries that take some time to build, their Dockerfiles and Pipelines. The steps to build and publish them as artifacts are the same as above.
+
+| **Python lib** | **Dockerfile** | **Pipeline** |
+| --- | --- | --- |
+| h5py | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/ubuntu16.04/python3.5/h5py/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/ubuntu16.04-python3.5-h5py.yml) |
+| cython | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/ubuntu16.04/python3.5/cython/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/ubuntu16.04-python3.5-cython.yml) |
+| grpcio | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/ubuntu16.04/python3.5/grpcio/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/ubuntu16.04-python3.5-grpcio.yml) |
+
