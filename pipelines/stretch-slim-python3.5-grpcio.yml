@@ -13,7 +13,7 @@ jobs:
     displayName: 'Download cython'
     inputs:
       command: download
-      vstsFeed: 'arm64v8'
+      vstsFeed: 'arm64'
       vstsFeedPackage: 'cython'
       vstsPackageVersion: 0.29.13
       downloadDirectory: '$(Build.SourcesDirectory)/stretch-slim/python3.5/grpcio/prereqs'      
