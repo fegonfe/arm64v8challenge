@@ -1,0 +1,39 @@
+jobs:
+- job: Build
+  pool:
+    vmImage: 'ubuntu-16.04'
+  steps:
+  - task: Docker@2
+    displayName: 'Run privileged container'
+    inputs:
+      command: run
+      arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+
+  - task: Docker@2
+    displayName: build
+    inputs:
+      containerRegistry: 'acr-serviceconnection'
+      command: build
+      Dockerfile: stretch-slim/python3.5/numpy/Dockerfile
+      arguments: '-t arm64v8/python3.5-numpy --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)'
+      tags: arm64v8/python3.5-numpy
+      addPipelineData: false
+
+  - task: Bash@3
+    inputs:
+      targetType: 'inline'
+      script: |
+        docker create -ti --name numpy arm64v8/python3.5-numpy bash
+        docker cp numpy:/dist $(Build.ArtifactStagingDirectory)/dist
+        docker rm -fv numpy
+
+  - task: UniversalPackages@0
+    inputs:
+      command: 'publish'
+      publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
+      feedsToUsePublish: 'internal'
+      vstsFeedPublish: 'arm64'
+      versionOption: 'custom'
+      versionPublish: '1.16.4'
+      vstsFeedPackagePublish: 'numpy'
+      packagePublishDescription: 'numpy built with arm64v8/python3.5'
