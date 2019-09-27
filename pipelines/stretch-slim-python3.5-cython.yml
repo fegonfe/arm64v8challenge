@@ -14,7 +14,7 @@ jobs:
     inputs:
       containerRegistry: 'acr-serviceconnection'
       command: build
-      Dockerfile: ubuntu16.04/python3.5/cython/Dockerfile
+      Dockerfile: stretch-slim/python3.5/cython/Dockerfile
       arguments: '-t arm64v8/python3.5-cython --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)'
       addPipelineData: false
 
@@ -33,7 +33,7 @@ jobs:
       command: 'publish'
       publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
       feedsToUsePublish: 'internal'
-      vstsFeedPublish: 'arm64v8'
+      vstsFeedPublish: 'arm64'
       versionOption: 'custom'
       versionPublish: '0.29.13'
       vstsFeedPackagePublish: 'cython'
