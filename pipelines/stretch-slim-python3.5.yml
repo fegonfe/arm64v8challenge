@@ -1,0 +1,25 @@
+pool:
+  name: Hosted Ubuntu 1604
+steps:
+- bash: |
+   # Install QEMU on host agent
+   sudo apt-get update
+   sudo apt-get install -y qemu qemu-user-static qemu-user binfmt-support
+   
+   # copy to sourcedir       
+   cp /usr/bin/qemu-aarch64-static $sourcedir
+
+  displayName: 'Install QEMU'
+  env:
+    sourcedir: $(Build.SourcesDirectory)/stretch-slim/python3.5
+
+- task: Docker@2
+  displayName: 'build and push'
+  inputs:
+    # uses service connection created in Lab 1
+    containerRegistry: 'acr-serviceconnection'
+    repository: arm64v8/python3.5
+    Dockerfile: stretch-slim/python3.5/Dockerfile
+    tags: |
+     1.0.$(Build.BuildId)-stretch-slim
+     latest
