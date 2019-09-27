@@ -12,16 +12,24 @@ jobs:
     displayName: 'Download numpy'
     inputs:
       command: download
-      vstsFeed: 'arm64v8'
+      vstsFeed: 'arm64'
       vstsFeedPackage: 'numpy'
       vstsPackageVersion: 1.16.4
-      downloadDirectory: '$(Build.SourcesDirectory)/ubuntu16.04/python3.5/h5py/prereqs'   
+      downloadDirectory: '$(Build.SourcesDirectory)/stretch-slim/python3.5/h5py/prereqs'
+  - task: UniversalPackages@0
+    displayName: 'Download cython'
+    inputs:
+      command: download
+      vstsFeed: 'arm64'
+      vstsFeedPackage: 'cython'
+      vstsPackageVersion: 0.29.13
+      downloadDirectory: '$(Build.SourcesDirectory)/stretch-slim/python3.5/h5py/prereqs'  
   - task: Docker@2
     displayName: build h5py for arm64v8
     inputs:
       containerRegistry: 'acr-serviceconnection'
       command: build
-      Dockerfile: ubuntu16.04/python3.5/h5py/Dockerfile
+      Dockerfile: stretch-slim/python3.5/h5py/Dockerfile
       arguments: '-t arm64v8/python3.5-h5py --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)'
       addPipelineData: false
 
@@ -40,7 +48,7 @@ jobs:
       command: 'publish'
       publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
       feedsToUsePublish: 'internal'
-      vstsFeedPublish: 'arm64v8'
+      vstsFeedPublish: 'arm64'
       versionOption: 'custom'
       versionPublish: '2.10.0'
       vstsFeedPackagePublish: 'h5py'
