@@ -24,8 +24,8 @@ jobs:
       Dockerfile: simulated-device/Dockerfile
       arguments: '--build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg IOTHUB_DEVICE_CONNECTION_STRING=$(iot-device-conn-string)'   
       tags: |
-      1.0.$(Build.BuildId)
-      latest
+        1.0.$(Build.BuildId)
+        latest
 
   - task: Docker@2
     displayName: 'push'
@@ -34,8 +34,8 @@ jobs:
       containerRegistry: 'acr-serviceconnection'
       repository: arm64v8/simulated-device
       tags: |
-      1.0.$(Build.BuildId)
-      latest
+        1.0.$(Build.BuildId)
+        latest
       
   - task: AzureIoTEdge@2
     displayName: 'Azure IoT Edge - Generate deployment manifest'
