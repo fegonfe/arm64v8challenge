@@ -13,7 +13,7 @@
               "$CONTAINER_REGISTRY": {
                 "username": "$CONTAINER_REGISTRY_USERNAME",
                 "password": "$CONTAINER_REGISTRY_PASSWORD",
-                "address": "${CONTAINER_REGISTRY}.azurecr.io"
+                "address": "$CONTAINER_REGISTRY"
               }
             }
           }
@@ -63,7 +63,7 @@
             "status": "running",
             "restartPolicy": "always",
             "settings": {
-              "image": "${CONTAINER_REGISTRY}.azurecr.io/$IMAGE",
+              "image": "$CONTAINER_REGISTRY/$IMAGE",
               "createOptions": {}
             }
           }
