@@ -46,7 +46,7 @@ jobs:
     env:
       CONTAINER_REGISTRY_USERNAME: $(iot-device-user)
       CONTAINER_REGISTRY_PASSWORD: $(iot-device-pwd)
-      CONTAINER_REGISTRY: $(DOCKER_REGISTRY)
+      CONTAINER_REGISTRY: $(DOCKER_REGISTRY_NAME)
       MODULE_NAME: simulated-device
       IMAGE: arm64v8/simulated-device:latest
 
