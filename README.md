@@ -18,8 +18,8 @@ Actually, you only need ton run a privileged container if you have platform depe
 
 **Step 1.** Define the variables that you are going to use through out the labs:
 ```bash
-userId=$(az ad signed-in-user show --query objectId)
-unique=${userId:1:8}
+userId=$(az ad signed-in-user show --query objectId -o tsv)
+unique=${userId:0:8}
 resourceGroup=arm64v8challenge
 location=eastus
 containerRegistry=arm64v8cr$unique
@@ -68,7 +68,7 @@ steps:
     sourcedir: $(Build.SourcesDirectory)/ubuntu16.04/base
 
 - task: Docker@2
-  displayName: 'Run priviledged container'
+  displayName: 'Run privileged container'
   inputs:
     command: run
     arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
@@ -258,98 +258,70 @@ Congrats! You have completed the CI/CD Pipelines and you have a place to test yo
 
 ## Lab 2: Python
 Python is one of the programming languages that is supported on ARM64, but with some limitation regarding 
-packages. With the base image already created, adding Python to it becomes very simple.
+packages. With the base image already created, adding Python to it becomes very simple. However, if you run `apt-get install python3` on this image, you will get version 3.5.2. To get the latest version, which includes critical security fixes, you would need to build it from source. Fortunately, there are official images from Docker Hub. Let's create a base image for python apps based on that. The process is very similar to Lab 1.
 
-**Step 1.** Create a new folder and name it ubuntu16.04/python3.5 and set Dockerfile as the file name. Copy and Paste the following to the Dockerfile:
+**Step 1.** Create a new folder and name it stretch-slim/python3.5 and set Dockerfile as the file name. Copy and Paste the following to the Dockerfile:
 
-    ARG DOCKER_REGISTRY
-    FROM ${DOCKER_REGISTRY}/arm64v8/base
+    ARG DEBIAN_VERSION=3.5-slim-stretch
+    FROM arm64v8/python:${DEBIAN_VERSION}
+    # this will satisfy the requirement to have the binary inside the image
+    COPY qemu-aarch64-static /usr/bin
 
-    RUN apt-get update \
-        && apt-get install -y --no-install-recommends wget ca-certificates python3 \
-        && wget -nv https://bootstrap.pypa.io/get-pip.py \
-        ## installs pip using recommended method
-        && python3 get-pip.py --disable-pip-version-check --no-cache-dir \
-        && apt-get purge -y wget \
-        && apt-get autoremove -y \
-        && apt-get clean -y \
-        && rm -rf /var/lib/apt/lists/* \
-        && rm -f get-pip.py
-
-**Step 2.** Create a new file under the pipelines folder and set ubuntu16.04-python3.5.yml as the file name. Copy and Paste the following to the yml file:
+**Step 2.** Create a new file under the pipelines folder and set stretch-slim-python3.5.yml as the file name. Copy and Paste the following to the yml file:
 ```yml
 pool:
   name: Hosted Ubuntu 1604
 steps:
-- task: Docker@2
-  displayName: 'Run priviledged container'
-  inputs:
-    command: run
-    arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+- bash: |
+   # Install QEMU on host agent
+   sudo apt-get update
+   sudo apt-get install -y qemu qemu-user-static qemu-user binfmt-support
+   
+   # copy to sourcedir       
+   cp /usr/bin/qemu-aarch64-static $sourcedir
+
+  displayName: 'Install QEMU'
+  env:
+    sourcedir: $(Build.SourcesDirectory)/stretch-slim/python3.5
 
 - task: Docker@2
-  displayName: 'build'
+  displayName: 'build and push'
   inputs:
-    command: build
     # uses service connection created in Lab 1
     containerRegistry: 'acr-serviceconnection'
     repository: arm64v8/python3.5
-    Dockerfile: ubuntu16.04/python3.5/Dockerfile
-    arguments: --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)
+    Dockerfile: stretch-slim/python3.5/Dockerfile
     tags: |
-     1.0.$(Build.BuildId)-xenial
-     latest
-
-- task: Docker@2
-  displayName: 'push'
-  inputs:
-    command: push
-    # uses service connection created in Lab 1
-    containerRegistry: 'acr-serviceconnection'
-    repository: arm64v8/python3.5
-    tags: |
-     1.0.$(Build.BuildId)-xenial
+     1.0.$(Build.BuildId)-stretch-slim
      latest
 ```
-Here is what this pipeline does:
-1. First task runs the privileged container as explained in Lab 1. It is need now because there is a RUN command in the Dockerfile.
-2. The second task builds the image using an argument to pass the container registry from where the base image will be pulled.
-3. The third task pushes the image.
 
-**Step 3.** The pipeline needs permission to pull the base image from the container registry:
-```bash
-scope=$(az acr show --name $containerRegistry --query id --output tsv)
-spdevops=$(az role assignment list --scope $scope --role AcrPush --query "[?principalName!=''].principalName" --output tsv)
-az role assignment create --role AcrPull --assignee $spdevops --scope $scope
-```
+**Step 3.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/stretch-slim-python3.5.yml and click **Continue**. Review the yml file and click **Run**.
 
-**Step 4.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-python3.5.yml and click **Continue**. 
-After reviewing the yml file, click on **Variables** and then **New variable**. Set the name to **DOCKER_REGISTRY** and value with full name of the container registry, i.e. the value of $containerRegistry variable with ".azurecr.io" suffix. Click **OK**, **Save** and then **Run**.
-
-**Step 5.** If the build succeeded, you can check your image:
+**Step 4.** If the build succeeded, you can check your image:
 ```bash
 az acr repository show-tags --name $containerRegistry --repository arm64v8/python3.5
 ```
 
-### Big wheel keep on turning
-The challenge for python with ARM64 is that some packages are not available in wheel format. When you run `pip install package-name`, it actually downloads the source and compile it on your device. The [Numpy](https://www.numpy.org/) library, a well-known library used for scientific computing, is one example. It would not be a problem to allow the library to be compiled during the application build, but some libs take a lot of time to build. For example, numpy takes between 20 to 25 minutes to build on a hosted agent ([Standard_DS2_v2](https://docs.microsoft.com/en-us/azure/virtual-machines/windows/sizes-general#dsv2-series)). This is where Artifacts feeds become handy. You can publish your packages to a feed and reuse them on as many applications as you need. But, there is a caveat for ARM64: you cannot use the python feed. If you try, you will receive this error:
+### Big wheels keep on turning
+The challenge for python with ARM64 is that some packages are not available in wheel format. When you run `pip install package-name`, it downloads the source and compile it on your device. The [Numpy](https://www.numpy.org/) library, a well-known library used for scientific computing, is one example. It would not be a problem to allow the library to be compiled during the application build, but some libs take a lot of time to build. For example, numpy takes between 20 to 25 minutes to build on a hosted agent ([Standard_DS2_v2](https://docs.microsoft.com/en-us/azure/virtual-machines/windows/sizes-general#dsv2-series)). This is where Artifacts feeds become handy. You can publish your packages to a feed and reuse them on as many applications as you need. But, there is a caveat for ARM64: you cannot use the python feed. If you try, you will receive this error:
 
     The input file name 'package-name-version-none-none-linux_aarch64.whl' contains an invalid platform part: 'linux_aarch64'. See the platform section of PEP 425 (and PEP 513 for Linux distributions) for more information.
 
 For ARM64, you will have to use a Universal feed. Since there are standard tasks to publish and download packages to/from a Universal feed, you will need to use them in your pipelines accordinly. Let's build a numpy package and publish to a feed.
 
-**Step 1.** On Azure DevOps, select **Artifacts** and click on **New feed**. Name it **arm64v8** and click **Create**.
+**Step 1.** On Azure DevOps, select **Artifacts** and click on **New feed**. Name it **arm64** and click **Create**.
 
-**Step 2.** Create a new folder and name it ubuntu16.04/python3.5/numpy and set Dockerfile as the file name. Copy and Paste the following to the Dockerfile:
+**Step 2.** Create a new folder and name it stretch-slim/python3.5/numpy and set Dockerfile as the file name. Copy and Paste the following to the Dockerfile:
 
     ARG DOCKER_REGISTRY
     FROM ${DOCKER_REGISTRY}/arm64v8/python3.5
     
     RUN apt-get update \
-      && apt-get install -y --no-install-recommends build-essential python3-dev libatlas-base-dev \
+      && apt-get install -y --no-install-recommends build-essential libatlas-base-dev \
       && pip3 wheel --no-deps --wheel-dir=./dist numpy==1.16.4
 
-**Step 3.** Create a new file under the pipelines folder and set ubuntu16.04-python3.5-numpy.yml as the file name. Copy and Paste the following to the yml file:
+**Step 3.** Create a new file under the pipelines folder and set stretch-slim-python3.5-numpy.yml as the file name. Copy and Paste the following to the yml file:
 ```yml
 jobs:
 - job: Build
@@ -357,7 +329,7 @@ jobs:
     vmImage: 'ubuntu-16.04'
   steps:
   - task: Docker@2
-    displayName: 'Run priviledged container'
+    displayName: 'Run privileged container'
     inputs:
       command: run
       arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
@@ -367,7 +339,7 @@ jobs:
     inputs:
       containerRegistry: 'acr-serviceconnection'
       command: build
-      Dockerfile: ubuntu16.04/python3.5/numpy/Dockerfile
+      Dockerfile: stretch-slim/python3.5/numpy/Dockerfile
       arguments: '-t arm64v8/python3.5-numpy --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY)'
       tags: arm64v8/python3.5-numpy
       addPipelineData: false
@@ -385,28 +357,37 @@ jobs:
       command: 'publish'
       publishDirectory: '$(Build.ArtifactStagingDirectory)/dist'
       feedsToUsePublish: 'internal'
-      vstsFeedPublish: 'arm64v8'
+      vstsFeedPublish: 'arm64'
       versionOption: 'custom'
       versionPublish: '1.16.4'
       vstsFeedPackagePublish: 'numpy'
       packagePublishDescription: 'numpy built with arm64v8/python3.5'
 ```
 Here is what this pipeline does:
-1. First two tasks are the same as the python image.
-2. The third task creates a container just to copy the wheel file. Note that you don't to save this image to a repository.
-3. Last task publishes the package to the feed.
+1. First task runs the privileged container as explained in Lab 1. It is need now because there is a RUN command in the Dockerfile.
+2. The second task builds the image using an argument to pass the container registry from where the base image will be pulled.
+3. The third task creates a container just to copy the wheel file. Note that you don't need to save this image to a repository.
+4. Last task publishes the package to the feed.
 
-**Step 4.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/ubuntu16.04-python3.5.yml and click **Continue**. 
+**Step 4.** The pipeline needs permission to pull the base image from the container registry:
+```bash
+scope=$(az acr show --name $containerRegistry --query id --output tsv)
+spdevops=$(az role assignment list --scope $scope --role AcrPush --query "[?principalName!=''].principalName" --output tsv)
+az role assignment create --role AcrPull --assignee $spdevops --scope $scope
+```
+
+**Step 5.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/stretch-slim-python3.5-numpy.yml and click **Continue**. 
 After reviewing the yml file, click on **Variables** and then **New variable**. Set the name to **DOCKER_REGISTRY** and value with full name of the container registry, i.e. the value of $containerRegistry variable with ".azurecr.io" suffix. Click **OK**, **Save** and then **Run**.
 
-**Step 5.** If the build succeeded, go to **Artifacts** and you should see that the numpy package is available in the arm64v8 feed.
+**Step 6.** If the build succeeded, go to **Artifacts** and you should see that the numpy package is available in the arm64 feed.
 
 ### When the wheels come down
 Here are more well-known libraries that take some time to build, their Dockerfiles and Pipelines. The steps to build and publish them as artifacts are the same as above.
 
 | **Python lib** | **Dockerfile** | **Pipeline** |
 | --- | --- | --- |
-| h5py | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/ubuntu16.04/python3.5/h5py/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/ubuntu16.04-python3.5-h5py.yml) |
-| cython | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/ubuntu16.04/python3.5/cython/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/ubuntu16.04-python3.5-cython.yml) |
-| grpcio | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/ubuntu16.04/python3.5/grpcio/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/ubuntu16.04-python3.5-grpcio.yml) |
+| h5py | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/stretch-slim/python3.5/h5py/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/stretch-slim-python3.5-h5py.yml) |
+| cython | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/stretch-slim/python3.5/cython/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/stretch-slim-python3.5-cython.yml) |
+| grpcio | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/stretch-slim/python3.5/grpcio/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/stretch-slim-python3.5-grpcio.yml) |
 
+**Important Note**: some libs might take more than an hour to build. For this, the _free tier_ is not enough. Check [Microsoft-hosted CI/CD in Azure Pipelines](https://go.microsoft.com/fwlink/?LinkId=832649). 

@@ -14,7 +14,7 @@ steps:
     sourcedir: $(Build.SourcesDirectory)/ubuntu16.04/base
 
 - task: Docker@2
-  displayName: 'Run priviledged container'
+  displayName: 'Run privileged container'
   inputs:
     command: run
     arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
