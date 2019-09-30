@@ -16,8 +16,9 @@ jobs:
       KeyVaultName: arm64v8KeyVault
 
   - task: Docker@2
-    displayName: 'build and push'
+    displayName: 'build'
     inputs:
+      command: build
       containerRegistry: 'acr-serviceconnection'
       repository: arm64v8/simulated-device
       Dockerfile: simulated-device/Dockerfile
@@ -26,6 +27,16 @@ jobs:
       1.0.$(Build.BuildId)
       latest
 
+  - task: Docker@2
+    displayName: 'push'
+    inputs:
+      command: push
+      containerRegistry: 'acr-serviceconnection'
+      repository: arm64v8/simulated-device
+      tags: |
+      1.0.$(Build.BuildId)
+      latest
+      
   - task: AzureIoTEdge@2
     displayName: 'Azure IoT Edge - Generate deployment manifest'
     inputs:
