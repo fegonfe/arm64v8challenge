@@ -1,0 +1,11 @@
+ARG DOCKER_REGISTRY
+ARG IOTHUB_DEVICE_CONNECTION_STRING
+FROM ${DOCKER_REGISTRY}/arm64v8/python3.5
+
+WORKDIR /app
+COPY SimulatedDevice.py .
+
+RUN pip3 install azure-iot-device
+ENV IOTHUB_DEVICE_CONNECTION_STRING=${IOTHUB_DEVICE_CONNECTION_STRING}
+
+CMD ["python3", "/app/SimulatedDevice.py"]

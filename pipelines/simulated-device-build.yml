@@ -1,0 +1,45 @@
+jobs:
+- job: Build
+  pool:
+    vmImage: 'ubuntu-16.04'
+  steps:
+  - task: Docker@2
+    displayName: 'Run privileged container'
+    inputs:
+      command: run
+      arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+
+  - task: AzureKeyVault@1
+    displayName: 'Azure Key Vault: Get Credentials'
+    inputs:
+      azureSubscription: 'arm-serviceconnection'
+      KeyVaultName: arm64v8KeyVault
+
+  - task: Docker@2
+    displayName: 'build and push'
+    inputs:
+      containerRegistry: 'acr-serviceconnection'
+      repository: arm64v8/simulated-device
+      Dockerfile: simulated-device/Dockerfile
+      arguments: '--build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) IOTHUB_DEVICE_CONNECTION_STRING=$(iot-device-conn-string)'   
+      tags: |
+      1.0.$(Build.BuildId)
+      latest
+
+  - task: AzureIoTEdge@2
+    displayName: 'Azure IoT Edge - Generate deployment manifest'
+    inputs:
+      action: 'Generate deployment manifest'
+      templateFilePath: deploy/deployment.template.json
+      defaultPlatform: arm64v8
+    env:
+      CONTAINER_REGISTRY_USERNAME: $(iot-device-user)
+      CONTAINER_REGISTRY_PASSWORD: $(iot-device-pwd)
+      CONTAINER_REGISTRY: $(DOCKER_REGISTRY)
+      MODULE_NAME: simulated-device
+      IMAGE: arm64v8/simulated-device:latest
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Artifact: drop'
+    inputs:
+      PathtoPublish: '$(System.DefaultWorkingDirectory)/config/deployment.json'
