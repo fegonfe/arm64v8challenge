@@ -48,7 +48,7 @@ jobs:
       CONTAINER_REGISTRY_PASSWORD: $(iot-device-pwd)
       CONTAINER_REGISTRY: $(DOCKER_REGISTRY_NAME)
       MODULE_NAME: simulated-device
-      IMAGE: arm64v8/simulated-device:latest
+      IMAGE: arm64v8/simulated-device:1.0.$(Build.BuildId)
 
   - task: PublishBuildArtifacts@1
     displayName: 'Publish Artifact: drop'
