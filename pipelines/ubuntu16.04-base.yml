@@ -47,7 +47,7 @@ steps:
   env:
     CONTAINER_REGISTRY_USERNAME: $(iot-device-user)
     CONTAINER_REGISTRY_PASSWORD: $(iot-device-pwd)
-    CONTAINER_REGISTRY: arm64v8cr.azurecr.io
+    CONTAINER_REGISTRY: $(DOCKER_REGISTRY_NAME)
     MODULE_NAME: arm64v8base
     IMAGE: arm64v8/base:latest
 
