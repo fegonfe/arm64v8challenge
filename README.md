@@ -189,7 +189,7 @@ az keyvault set-policy --name $keyVault --spn http://$svcPrincipalPipeline --sec
     CONTAINER_REGISTRY_PASSWORD: $(iot-device-pwd)
     CONTAINER_REGISTRY: {fill it with the value of the $containerRegistry variable}
     MODULE_NAME: arm64v8base
-    IMAGE: arm64v8/base:latest
+    IMAGE: arm64v8/base:1.0.$(Build.BuildId)-xenial
 
 - task: PublishBuildArtifacts@1
   displayName: 'Publish Artifact: drop'
@@ -298,7 +298,7 @@ steps:
 
 **Step 3.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/stretch-slim-python3.5.yml and click **Continue**. Review the yml file and click **Run**.
 
-**Step 4.** If the build succeeded, you can check your image:
+**Step 4.** If the build succeeded, you will have a new image:
 ```bash
 az acr repository show-tags --name $containerRegistry --repository arm64v8/python3.5
 ```
@@ -391,3 +391,117 @@ Here are more well-known libraries that take some time to build, their Dockerfil
 | grpcio | [Dockerfile](https://github.com/fegonfe/arm64v8challenge/blob/master/stretch-slim/python3.5/grpcio/Dockerfile) | [Pipeline](https://github.com/fegonfe/arm64v8challenge/blob/master/pipelines/stretch-slim-python3.5-grpcio.yml) |
 
 **Important Note**: some libs might take more than an hour to build. For this, the _free tier_ is not enough. Check [Microsoft-hosted CI/CD in Azure Pipelines](https://go.microsoft.com/fwlink/?LinkId=832649). 
+
+### Temperature and humidity
+With the base image ready with python, let's deploy a sample application that sends data to the Event Hub. We are going to use this [Quickstart](https://docs.microsoft.com/en-us/azure/iot-hub/quickstart-send-telemetry-python) with a few updates:
+1. We are going to use the new [Azure IoT Hub Python SDKs](https://github.com/Azure/azure-iot-sdk-python).
+2. We are going to use an environment variable for the device connection string.
+3. Of course, we are going to deploy the app in a container.
+
+**Step 1.** On your repo, create a new folder, name it simulated-device and set `SimulatedDevice.py` as the file name. Copy and Paste the content from [this file](https://raw.githubusercontent.com/fegonfe/arm64v8challenge/master/simulated-device/SimulatedDevice.py).
+
+**Step 2.** Create a new file under the simulated-device folder and set Dockerfile as the file name. Copy and Paste the following to the Dockerfile file:
+
+    ARG DOCKER_REGISTRY
+    FROM ${DOCKER_REGISTRY}/arm64v8/python3.5
+
+    ARG IOTHUB_DEVICE_CONN_STRING
+    WORKDIR /app
+    COPY SimulatedDevice.py .
+
+    ENV IOTHUB_DEVICE_CONNECTION_STRING ${IOTHUB_DEVICE_CONN_STRING}
+    RUN pip3 install azure-iot-device
+
+    CMD ["python3", "/app/SimulatedDevice.py"]
+
+**Step 3.** Add the device connection string to the key vault:
+```bash
+connString=$(az iot hub device-identity show-connection-string -g $resourceGroup --device-id edgeDeviceVM --hub-name $iotHub --query connectionString --output tsv)
+az keyvault secret set --vault-name $keyVault --name iot-device-conn-string --value $connString
+```
+
+**Step 4.** Create a new file under the pipelines folder and set simulated-device-build.yml as the file name. Copy and Paste the following to the yml file:
+```yml
+jobs:
+- job: Build
+  pool:
+    vmImage: 'ubuntu-16.04'
+  steps:
+  - task: Docker@2
+    displayName: 'Run privileged container'
+    inputs:
+      command: run
+      arguments: '--rm --privileged multiarch/qemu-user-static:register --reset'
+
+  - task: AzureKeyVault@1
+    displayName: 'Azure Key Vault: Get Credentials'
+    inputs:
+      azureSubscription: 'arm-serviceconnection'
+      KeyVaultName: arm64v8KeyVault
+
+  - task: Docker@2
+    displayName: 'build'
+    inputs:
+      command: build
+      containerRegistry: 'acr-serviceconnection'
+      repository: arm64v8/simulated-device
+      Dockerfile: simulated-device/Dockerfile
+      arguments: '--build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg IOTHUB_DEVICE_CONN_STRING="$(iot-device-conn-string)"'   
+      tags: |
+        1.0.$(Build.BuildId)
+        latest
+
+  - task: Docker@2
+    displayName: 'push'
+    inputs:
+      command: push
+      containerRegistry: 'acr-serviceconnection'
+      repository: arm64v8/simulated-device
+      tags: |
+        1.0.$(Build.BuildId)
+        latest
+      
+  - task: AzureIoTEdge@2
+    displayName: 'Azure IoT Edge - Generate deployment manifest'
+    inputs:
+      action: 'Generate deployment manifest'
+      templateFilePath: deploy/deployment.template.json
+      defaultPlatform: arm64v8
+    env:
+      CONTAINER_REGISTRY_USERNAME: $(iot-device-user)
+      CONTAINER_REGISTRY_PASSWORD: $(iot-device-pwd)
+      CONTAINER_REGISTRY: $(DOCKER_REGISTRY_NAME)
+      MODULE_NAME: simulated-device
+      IMAGE: arm64v8/simulated-device:1.0.$(Build.BuildId)
+
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Artifact: drop'
+    inputs:
+      PathtoPublish: '$(System.DefaultWorkingDirectory)/config/deployment.json'
+```
+Here is what this pipeline does:
+1. First task runs the privileged container as previously.
+2. The second task gets the credentials from the key vault.
+3. The third task builds the image using two arguments: the container registry and the device connection string.
+4. The fourth task pushes it to the container registry.
+5. The fifth task generates the deployment manifest as in previous lab.
+6. Last task just publishes the manifest file as a build artifact.
+
+Notice that this pipeline needs two variables: **DOCKER_REGISTRY** is the login server of the container registry. **DOCKER_REGISTRY_NAME** is just the container registry name.
+
+**Step 5.** Open **Pipelines**, select **Builds** and **New build pipeline**. Select your source and your repo. In the **Configure your pipeline** step, select **Existing Azure Pipelines YAML file**. Set Path to /pipelines/simulated-device-build.yml and click **Continue**. 
+After reviewing the yml file, click on **Variables** and then **New variable**. Set the name to **DOCKER_REGISTRY** and value with full name of the container registry, i.e. the value of $containerRegistry variable with ".azurecr.io" suffix. Click **OK**. Add a new variable, set the name to **DOCKER_REGISTRY_NAME** and value with the value of $containerRegistry variable. Click **OK**, **Save** and then **Run**.
+
+**Step 6.** If the build succeeded, you will have a new image:
+```bash
+az acr repository show-tags --name $containerRegistry --repository arm64v8/simulated-device
+```
+Also, click on **Artifacts** and select **drop**. In the **Artifacts explorer**, you can check that the deployment.json file was created.
+
+**Step 7.** To deploy the container to the IoT Edge, follow the same steps of [Deploy to the IoT Edge Device](https://github.com/fegonfe/arm64v8challenge#deploy-to-the-iot-edge-device).
+
+**Step 8.** To read the messages sent by the app, run the following command:
+```bash
+az iot hub monitor-events --hub-name $iotHub --device-id edgeDeviceVM 
+```
+**Step 9.(optional)** If you want to see the data on a Power BI dashboard, check [Visualize real-time sensor data from Azure IoT Hub using Power BI](https://docs.microsoft.com/en-us/azure/iot-hub/iot-hub-live-data-visualization-in-power-bi).
